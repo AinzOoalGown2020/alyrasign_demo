@@ -5,8 +5,9 @@ import React from "react";
 import { useAutoConnect } from '../contexts/AutoConnectProvider';
 import NetworkSwitcher from './NetworkSwitcher';
 import NavElement from './nav-element';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import Image from 'next/image';
+import { checkProgramState } from '../lib/solana';
 
 const WalletMultiButtonDynamic = dynamic(
   async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
@@ -23,19 +24,42 @@ export const AppBar: React.FC = () => {
   const { autoConnect, setAutoConnect } = useAutoConnect();
   const [isNavOpen, setIsNavOpen] = useState(false);
   const wallet = useWallet();
+  const { connection } = useConnection();
   const [walletConnected, setWalletConnected] = useState<boolean>(false);
+  const [isBlockchainInitialized, setIsBlockchainInitialized] = useState<boolean>(false);
   
   // Effet pour suivre l'état de connexion du wallet
   useEffect(() => {
     setWalletConnected(wallet.connected);
   }, [wallet.connected]);
   
+  // Vérifier si le programme est initialisé sur la blockchain
+  useEffect(() => {
+    const checkBlockchainState = async () => {
+      if (wallet.connected && connection) {
+        try {
+          console.log('Vérification de l\'état de la blockchain...');
+          const state = await checkProgramState(connection);
+          console.log('État de la blockchain:', state);
+          setIsBlockchainInitialized(state.programExists && state.storageExists);
+        } catch (error) {
+          console.error('Erreur lors de la vérification de l\'état de la blockchain:', error);
+          setIsBlockchainInitialized(false);
+        }
+      } else {
+        setIsBlockchainInitialized(false);
+      }
+    };
+    
+    checkBlockchainState();
+  }, [wallet.connected, connection]);
+  
   // Simuler la vérification du rôle (à remplacer par la vraie vérification sur la blockchain)
   const [userRole, setUserRole] = useState<UserRole>(null);
   
   useEffect(() => {
     const checkUserRole = () => {
-      if (wallet.publicKey?.toString() === DEV_ADDRESS) {
+      if (wallet.publicKey?.toString() === DEV_ADDRESS && isBlockchainInitialized) {
         setUserRole('formateur');
       } else if (wallet.connected) {
         // Vérifier le rôle dans le localStorage
@@ -53,7 +77,7 @@ export const AppBar: React.FC = () => {
     };
     
     checkUserRole();
-  }, [wallet.connected, wallet.publicKey]);
+  }, [wallet.connected, wallet.publicKey, isBlockchainInitialized]);
   
   // Fonction pour forcer la déconnexion du wallet
   const handleDisconnect = async () => {
@@ -89,12 +113,11 @@ export const AppBar: React.FC = () => {
               </Link>
             </div>
           </div>
-          <WalletMultiButtonDynamic className="btn-ghost btn-sm relative flex md:hidden text-lg " />
         </div>
 
         {/* Nav Links */}
         <div className="navbar-end">
-          <div className="hidden md:inline-flex align-items-center justify-items gap-6">
+          <div className="hidden md:inline-flex items-center justify-items-center gap-6 h-full">
             <NavElement
               label="Accueil"
               href="/"
@@ -145,7 +168,9 @@ export const AppBar: React.FC = () => {
               />
             )}
             
-            <WalletMultiButtonDynamic className="btn-ghost btn-sm rounded-btn text-lg mr-6" />
+            <div className="flex items-center h-full">
+              <WalletMultiButtonDynamic className="btn-ghost btn-sm rounded-btn text-lg mr-6 h-full flex items-center" />
+            </div>
           </div>
           
           {/* Menu mobile */}
@@ -212,6 +237,10 @@ export const AppBar: React.FC = () => {
                     navigationStarts={() => setIsNavOpen(false)}
                   />
                 )}
+                
+                <div className="flex justify-center mt-4">
+                  <WalletMultiButtonDynamic className="btn-ghost btn-sm rounded-btn text-lg" />
+                </div>
               </div>
             </div>
           )}

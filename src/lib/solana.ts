@@ -1,64 +1,44 @@
-import * as anchor from "@coral-xyz/anchor";
-import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { PublicKey, Connection } from "@solana/web3.js";
-import { SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
-import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { Program, AnchorProvider, Wallet as AnchorWallet, BN, Idl, IdlAccounts, IdlTypes, ProgramAccount, web3 } from '@coral-xyz/anchor';
+import { Connection, PublicKey, Transaction, VersionedTransaction, SignatureResult, SystemProgram, SYSVAR_RENT_PUBKEY, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { WalletContextState, Wallet } from '@solana/wallet-adapter-react';
+import { WalletAdapter } from '@solana/wallet-adapter-base';
 import { toast } from 'react-toastify';
-import { IDL, PROGRAM_ID } from './idl/alyrasign';
-import { AnchorWallet } from '@solana/wallet-adapter-react';
-import { BN } from '@coral-xyz/anchor';
-import { TransactionMessage, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { IDL, PROGRAM_ID, AlyraSignAccountData } from './idl/alyrasign';
+import { TransactionMessage } from '@solana/web3.js';
+import { WaitlistEntry, WaitlistStatus } from '../features/formation/types';
 
-// Définir le type pour le programme AlyraSign
-export type AlyraSignProgram = Program<any>;
+// Types pour le wallet
+export interface ExtendedWalletContextState extends Omit<WalletContextState, 'wallet'> {
+  wallet: Wallet | null;
+}
+
+// Types pour les erreurs
+export interface ProgramError extends Error {
+  code?: string;
+  logs?: string[];
+}
+
+// Types pour le programme
+export type AlyraSignProgram = Program<Idl>;
+
+// Types pour les comptes
+export type AccessRequestAccount = IdlAccounts<typeof IDL>['AccessRequest'];
+export type FormationAccount = IdlAccounts<typeof IDL>['Formation'];
+export type SessionAccount = IdlAccounts<typeof IDL>['Session'];
+export type AttendanceAccount = IdlAccounts<typeof IDL>['Attendance'];
 
 // Types pour les PDAs
 export type PDAResult = [PublicKey, number];
 
-// Types pour les comptes
-export interface AttendanceAccount {
-  id: string;
-  sessionId: string;
-  student: PublicKey;
-  isPresent: boolean;
-  checkInTime: number;
-  checkOutTime: number | null;
-  note: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface AttendanceData {
-  id: string;
-  sessionId: string;
-  student: string;
-  isPresent: boolean;
-  checkInTime: number;
-  checkOutTime: number | null;
-  note: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface AttendanceResult {
-  id: string;
-  sessionId: string;
-  student: string;
-  isPresent: boolean;
-  checkInTime: number;
-  checkOutTime: number | null;
-  note: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
 // Types pour les demandes d'accès
 export interface RequestData {
+  id: string;
   walletAddress: string;
   requestedRole: string;
   message: string;
   status: string;
   processedAt?: string;
+  timestamp: string;
 }
 
 // Récupérer les seeds depuis .env.local
@@ -66,10 +46,11 @@ export const ACCESS_STORAGE_SEED = process.env.NEXT_PUBLIC_ACCESS_STORAGE_SEED |
 export const FORMATION_STORAGE_SEED = process.env.NEXT_PUBLIC_FORMATION_STORAGE_SEED || "formation-storage";
 export const SESSION_STORAGE_SEED = process.env.NEXT_PUBLIC_SESSION_STORAGE_SEED || "session-storage";
 export const ATTENDANCE_STORAGE_SEED = process.env.NEXT_PUBLIC_ATTENDANCE_STORAGE_SEED || "attendance-storage";
-export const REQUEST_SEED = process.env.NEXT_PUBLIC_REQUEST_SEED || "request";
-export const FORMATION_SEED = process.env.NEXT_PUBLIC_FORMATION_SEED || "formation";
-export const SESSION_SEED = process.env.NEXT_PUBLIC_SESSION_SEED || "session";
-export const ATTENDANCE_SEED = process.env.NEXT_PUBLIC_ATTENDANCE_SEED || "attendance";
+export const REQUEST_SEED = process.env.NEXT_PUBLIC_REQUEST_SEED || "req";
+export const FORMATION_SEED = process.env.NEXT_PUBLIC_FORMATION_SEED || "f";
+export const SESSION_SEED = process.env.NEXT_PUBLIC_SESSION_SEED || "s";
+export const ATTENDANCE_SEED = process.env.NEXT_PUBLIC_ATTENDANCE_SEED || "a";
+export const ENROLLMENT_SEED = process.env.NEXT_PUBLIC_ENROLLMENT_SEED || "e";
 
 // Configuration des tailles maximales depuis .env.local
 export const MAX_ROLE_LENGTH = parseInt(process.env.NEXT_PUBLIC_MAX_ROLE_LENGTH || "20");
@@ -112,60 +93,32 @@ export const ErrorTypes = {
   NOT_FOUND: 'NOT_FOUND',
 };
 
+export interface ExtendedSignatureResult extends SignatureResult {
+  logs?: string[];
+}
+
+export interface CustomWalletAdapter extends WalletAdapter {
+  adapter: {
+    name: string;
+  };
+}
+
 /**
  * Obtenir le provider Anchor avec le wallet actuel
  */
-export const getProvider = (wallet: any, connection: any): AnchorProvider => {
-  if (!wallet) {
-    throw new Error("Wallet not connected");
-  }
-
-  return new AnchorProvider(
-    connection,
-    wallet,
-    { preflightCommitment: 'processed' }
-  );
+export const getProvider = (wallet: AnchorWallet, connection: Connection): AnchorProvider => {
+  return new AnchorProvider(connection, wallet, {
+    commitment: 'confirmed',
+    preflightCommitment: 'confirmed'
+  });
 };
 
 /**
  * Fonction utilitaire pour obtenir le programme
  */
-export const getProgram = async (wallet: AnchorWallet, connection: Connection): Promise<AlyraSignProgram | null> => {
-  try {
-    console.log("getProgram appelé avec:", { 
-      wallet: wallet ? "disponible" : "non disponible",
-      connection: connection ? "disponible" : "non disponible",
-      publicKey: wallet?.publicKey?.toString(),
-      programId: PROGRAM_ID.toString()
-    });
-    
-    if (!wallet || !connection) {
-      console.warn("Wallet ou connexion non disponible, utilisation du mode simulation");
-      return null;
-    }
-    
-    // Vérifier si le wallet est connecté
-    if (!wallet.publicKey) {
-      console.warn("Wallet connecté mais pas de clé publique disponible");
-      return null;
-    }
-    
-    const provider = new AnchorProvider(
-      connection,
-      wallet,
-      { commitment: 'processed', preflightCommitment: 'processed' }
-    );
-    anchor.setProvider(provider);
-    
-    // TODO: Les erreurs de typage sont liées à la version d'Anchor et seront résolues dans une future mise à jour
-    // @ts-ignore - Ignorer temporairement les erreurs de typage d'Anchor
-    const program = new Program(IDL, PROGRAM_ID, provider) as AlyraSignProgram;
-    console.log("Programme créé avec succès");
-    return program;
-  } catch (error) {
-    console.error("Erreur dans getProgram:", error);
-    return null;
-  }
+export const getProgram = (wallet: AnchorWallet, connection: Connection): AlyraSignProgram => {
+  const provider = getProvider(wallet, connection);
+  return new Program(IDL, PROGRAM_ID, provider);
 };
 
 // Fonction pour trouver le PDA du stockage
@@ -177,14 +130,13 @@ export const findAccessStoragePDA = async () => {
 };
 
 // Fonction pour trouver le PDA d'une demande d'accès
-export const findAccessRequestPDA = async (storagePDA: PublicKey, index: number) => {
-  return await PublicKey.findProgramAddress(
+export const findAccessRequestPDA = async (user: PublicKey): Promise<[PublicKey, number]> => {
+  return PublicKey.findProgramAddress(
     [
-      Buffer.from(REQUEST_SEED),
-      storagePDA.toBuffer(),
-      new BN(index).toArrayLike(Buffer, 'le', 8)
+      Buffer.from("access_request"),
+      user.toBuffer()
     ],
-    PROGRAM_ID
+    new PublicKey(PROGRAM_ID)
   );
 };
 
@@ -208,79 +160,85 @@ export const findSessionStoragePDA = async (): Promise<PDAResult> => {
   );
 };
 
-// Types pour les demandes d'accès
-export interface AccessRequest {
-  id: string;
-  walletAddress: string;
-  requestedRole: 'etudiant' | 'formateur';
-  message: string;
-  timestamp: string;
-  status: 'pending' | 'approved' | 'rejected';
-}
-
 // Fonction pour récupérer les demandes d'accès
 export const getAccessRequests = async (
   wallet: AnchorWallet,
   connection: Connection
-): Promise<AccessRequest[]> => {
+): Promise<RequestData[]> => {
   try {
     if (!USE_BLOCKCHAIN) {
       // Mode simulation
       const requests = JSON.parse(localStorage.getItem('accessRequests') || '[]');
-      return requests.map((req: any) => ({
+      return requests.map((req: RequestData) => ({
         id: req.id,
         walletAddress: req.walletAddress,
         requestedRole: req.requestedRole,
         message: req.message,
-        timestamp: req.timestamp,
-        status: req.status as 'pending' | 'approved' | 'rejected'
+        status: req.status,
+        processedAt: req.processedAt,
+        timestamp: req.timestamp
       }));
     }
 
-    const program = await getProgram(wallet, connection);
-    if (!program) {
-      throw new Error("Programme non disponible");
+    if (!wallet || !wallet.publicKey) {
+      console.error("Wallet non initialisé");
+      return [];
     }
 
-    // Récupérer le PDA du stockage
-    const [storagePDA] = await findAccessStoragePDA();
-    console.log("Storage PDA pour getAccessRequests:", storagePDA.toString());
+    const program = getProgram(wallet, connection);
+    if (!program) {
+      console.error("Programme non disponible");
+      return [];
+    }
 
-    // Récupérer le compte de stockage
-    const storageAccount = await (program.account as any).accessRequestStorage.fetch(storagePDA);
-    console.log("Compte de stockage trouvé:", storageAccount);
-    console.log("Nombre total de demandes:", storageAccount.requestCount);
+    try {
+      // Récupérer le PDA du stockage
+      const [storagePDA] = await findAccessStoragePDA();
+      console.log("Storage PDA pour getAccessRequests:", storagePDA.toString());
 
-    const requests: AccessRequest[] = [];
-    
-    // Parcourir toutes les demandes
-    for (let i = 0; i < storageAccount.requestCount; i++) {
-      try {
-        const [requestPDA] = await findAccessRequestPDA(storagePDA, i);
-        console.log(`Recherche de la demande ${i} à l'adresse:`, requestPDA.toString());
-        
-        const requestAccount = await (program.account as any).accessRequest.fetch(requestPDA);
-        console.log(`Demande ${i} trouvée:`, requestAccount);
+      // Récupérer le compte de stockage
+      const storageAccount = await program.account.accessRequestStorage.fetch(storagePDA);
+      if (!storageAccount) {
+        console.log("Aucun compte de stockage trouvé");
+        return [];
+      }
 
-        if (requestAccount) {
+      console.log("Compte de stockage trouvé:", storageAccount);
+      console.log("Nombre total de demandes:", storageAccount.requestCount);
+
+      const requests: RequestData[] = [];
+      
+      // Parcourir toutes les demandes
+      for (let i = 0; i < storageAccount.requestCount; i++) {
+        try {
+          const requestAddress = storageAccount.requests[i];
+          if (!requestAddress) continue;
+
+          const requestAccount = await program.account.accessRequest.fetch(requestAddress);
+          if (!requestAccount) continue;
+
           requests.push({
-            id: i.toString(),
-            walletAddress: requestAccount.requester.toString(),
+            id: requestAddress.toString(),
+            walletAddress: requestAccount.user.toString(),
             requestedRole: requestAccount.role,
             message: requestAccount.message,
-            timestamp: new Date(requestAccount.timestamp * 1000).toISOString(),
-            status: requestAccount.status
+            status: requestAccount.status,
+            processedAt: requestAccount.updatedAt ? new Date(requestAccount.updatedAt * 1000).toISOString() : undefined,
+            timestamp: new Date(requestAccount.createdAt * 1000).toISOString()
           });
+        } catch (error) {
+          console.error(`Erreur lors de la récupération de la demande ${i}:`, error);
+          continue;
         }
-      } catch (error) {
-        console.error(`Erreur lors de la récupération de la demande ${i}:`, error);
       }
-    }
 
-    console.log("Demandes récupérées:", requests);
-    return requests;
+      return requests;
+    } catch (error) {
+      console.error("Erreur lors de la récupération des demandes:", error);
+      return [];
+    }
   } catch (error) {
-    console.error("Erreur lors de la récupération des demandes d'accès:", error);
+    console.error("Erreur générale dans getAccessRequests:", error);
     return [];
   }
 };
@@ -308,10 +266,15 @@ export const calculateSessionPDA = async (sessionId: string): Promise<PDAResult>
 /**
  * Fonction pour créer une formation avec intégration blockchain
  */
-export const createFormation = async (title: string, description: string, wallet: any, connection: any) => {
+export const createFormation = async (
+  title: string, 
+  description: string, 
+  wallet: AnchorWallet, 
+  connection: Connection
+): Promise<boolean> => {
   try {
     if (process.env.NEXT_PUBLIC_USE_BLOCKCHAIN === 'true') {
-      const program = await getProgram(wallet, connection) as AlyraSignProgram;
+      const program = getProgram(wallet, connection);
       
       if (!wallet) {
         throw new Error("Wallet not connected");
@@ -321,12 +284,12 @@ export const createFormation = async (title: string, description: string, wallet
       const formationId = Date.now().toString();
       const [formationPda] = await calculateFormationPDA(formationId);
       
-      await (program.methods
+      await program.methods
         .upsertFormation(
           formationId,
           title,
           description
-        ) as any)
+        )
         .accounts({
           signer: wallet.publicKey,
           formationStorage: storagePda,
@@ -369,7 +332,7 @@ export const createFormation = async (title: string, description: string, wallet
 export const createSession = async (formationId: string, title: string, date: string, location: string, wallet: any, connection: any) => {
   try {
     if (process.env.NEXT_PUBLIC_USE_BLOCKCHAIN === 'true') {
-      const program = await getProgram(wallet, connection) as AlyraSignProgram;
+      const program = getProgram(wallet as AnchorWallet, connection) as AlyraSignProgram;
       
       if (!wallet) {
         throw new Error("Wallet not connected");
@@ -385,8 +348,8 @@ export const createSession = async (formationId: string, title: string, date: st
         .createSession(
           sessionId,
           formationId,
-          new anchor.BN(startDate),
-          new anchor.BN(endDate),
+          new BN(startDate),
+          new BN(endDate),
           location
         ) as any)
         .accounts({
@@ -496,68 +459,59 @@ export const getSessions = async () => {
  * Crée une demande d'accès
  */
 export const createAccessRequest = async (
-  wallet: AnchorWallet,
+  wallet: Wallet,
   connection: Connection,
-  requestedRole: string,
-  message: string
-): Promise<boolean> => {
+  role: string,
+  name: string,
+  email: string,
+  message?: string
+): Promise<string> => {
   try {
-    if (!USE_BLOCKCHAIN) {
-      // Mode simulation
-      const requests = JSON.parse(localStorage.getItem('accessRequests') || '[]');
-      const newRequest = {
-        id: Date.now().toString(),
-        walletAddress: wallet.publicKey.toString(),
-        requestedRole,
-        message,
-        timestamp: new Date().toISOString(),
-        status: 'pending'
-      };
-      requests.push(newRequest);
-      localStorage.setItem('accessRequests', JSON.stringify(requests));
-      return true;
+    if (!wallet) {
+      throw new Error("Portefeuille non fourni");
     }
 
-    const program = await getProgram(wallet, connection);
-    if (!program) {
-      throw new Error("Programme non disponible");
+    if (!wallet.publicKey) {
+      throw new Error("Portefeuille non connecté");
     }
 
-    // Récupérer le PDA du stockage
-    const [storagePDA] = await findAccessStoragePDA();
-    console.log("Storage PDA trouvé:", storagePDA.toString());
+    if (!wallet.payer) {
+      throw new Error("Portefeuille non initialisé correctement");
+    }
 
-    // Récupérer le compte de stockage pour obtenir le compteur
-    const storageAccount = await (program.account as any).accessRequestStorage.fetch(storagePDA);
-    console.log("Compte de stockage trouvé:", storageAccount);
+    // Vérifier si une demande existe déjà
+    const existingRequests = await getAccessRequests(wallet as unknown as AnchorWallet, connection);
+    const existingRequest = existingRequests.find(req => req.walletAddress === wallet.publicKey.toString());
     
-    // Utiliser le compteur actuel pour créer le PDA de la demande
-    const [requestPDA] = await findAccessRequestPDA(storagePDA, storageAccount.requestCount);
-    console.log("Request PDA créé:", requestPDA.toString());
+    if (existingRequest) {
+      throw new Error("Une demande existe déjà pour cette adresse");
+    }
 
-    // Créer la demande d'accès avec les options de transaction
-    const tx = await (program.methods as any)
-      .createAccessRequest(requestedRole, message)
+    const program = new Program(IDL, new PublicKey(PROGRAM_ID), {
+      connection,
+      wallet: wallet as unknown as AnchorWallet
+    });
+
+    const [requestPda] = await findAccessRequestPDA(wallet.publicKey);
+
+    // Créer la transaction
+    const tx = await program.methods
+      .requestAccess(role, name, email, message || "")
       .accounts({
-        storage: storagePDA,
-        request: requestPDA,
-        requester: wallet.publicKey,
-        systemProgram: SystemProgram.programId,
+        accessRequest: requestPda,
+        user: wallet.publicKey,
+        systemProgram: SystemProgram.programId
       })
-      .options({
-        commitment: 'confirmed',
-        preflightCommitment: 'confirmed',
-        skipPreflight: false,
-      })
+      .signers([wallet.payer])
       .rpc();
 
-    console.log("Transaction signature:", tx);
-    toast.success("Demande d'accès créée avec succès!");
-    return true;
+    return tx;
   } catch (error) {
     console.error("Erreur lors de la création de la demande d'accès:", error);
-    toast.error("Erreur lors de la création de la demande d'accès");
-    return false;
+    if (error instanceof Error) {
+      throw new Error(`Erreur lors de la création de la demande: ${error.message}`);
+    }
+    throw new Error("Une erreur inattendue est survenue");
   }
 };
 
@@ -633,7 +587,7 @@ export const approveAccessRequest = async (
       return true;
     }
 
-    const program = await getProgram(wallet, connection);
+    const program = getProgram(wallet as AnchorWallet, connection);
     if (!program) {
       throw new Error("Programme non disponible");
     }
@@ -641,7 +595,7 @@ export const approveAccessRequest = async (
     // Récupérer le PDA de la demande
     const [storagePDA] = await findAccessStoragePDA();
     const requestIdNumber = parseInt(requestId, 10);
-    const [requestPDA] = await findAccessRequestPDA(storagePDA, requestIdNumber);
+    const [requestPDA] = await findAccessRequestPDA(wallet.publicKey);
     
     // Approuver la demande avec le rôle sélectionné
     await (program.methods as any)
@@ -761,7 +715,7 @@ export const revokeAccess = async (requestId: string, wallet: any, connection: C
  */
 export const initializeAccessStorage = async (wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -790,7 +744,7 @@ export const initializeAccessStorage = async (wallet: any, connection: any) => {
  */
 export const initializeFormationStorage = async (wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -819,7 +773,7 @@ export const initializeFormationStorage = async (wallet: any, connection: any) =
  */
 export const initializeSessionStorage = async (wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -868,7 +822,7 @@ export const calculateAttendancePDA = async (studentPubkey: PublicKey, sessionId
  */
 export const initializeAttendanceStorage = async (wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -897,7 +851,7 @@ export const initializeAttendanceStorage = async (wallet: any, connection: any) 
  */
 export const recordAttendance = async (sessionId: string, isPresent: boolean, note: string = "", wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -932,7 +886,7 @@ export const recordAttendance = async (sessionId: string, isPresent: boolean, no
  */
 export const updateAttendance = async (sessionId: string, isPresent: boolean, note: string = "", wallet: any, connection: any) => {
   try {
-    const program = await getProgram(wallet, connection) as AlyraSignProgram;
+    const program = getProgram(wallet as AnchorWallet, connection);
     
     if (!wallet) {
       throw new Error("Wallet not connected");
@@ -999,54 +953,35 @@ export const checkUserRole = async (userPublicKey: string, role: string) => {
 /**
  * Récupère l'historique des présences d'un étudiant
  */
-export const getStudentAttendances = async (studentPubkey: PublicKey, wallet: any, connection: any) => {
+export const getStudentAttendances = async (studentPubkey: PublicKey, wallet: AnchorWallet, connection: Connection): Promise<AttendanceAccount[]> => {
   try {
     if (process.env.NEXT_PUBLIC_USE_BLOCKCHAIN === 'true') {
-      const program = await getProgram(wallet, connection) as AlyraSignProgram;
-      
-      // Utiliser une assertion de type pour contourner les erreurs de typage
-      const attendances = await (program.account as any).all([
+      const program = getProgram(wallet, connection);
+      const attendances = await program.account.attendance.all([
         {
           memcmp: {
-            offset: 8 + 8 + 8,
+            offset: 8 + 8 + 8, // Après id et sessionId
             bytes: studentPubkey.toBase58()
           }
         }
-      ]) as { account: AttendanceAccount }[];
+      ]);
       
-      return attendances.map(a => ({
-        id: a.account.id,
-        sessionId: a.account.sessionId,
-        student: a.account.student.toString(),
-        isPresent: a.account.isPresent,
-        checkInTime: new Date(a.account.checkInTime * 1000),
-        checkOutTime: a.account.checkOutTime ? new Date(a.account.checkOutTime * 1000) : null,
-        note: a.account.note,
-        createdAt: new Date(a.account.createdAt * 1000),
-        updatedAt: new Date(a.account.updatedAt * 1000)
-      }));
+      return attendances.map(({ account }) => account as AttendanceAccount);
     } else {
       const attendancesJson = localStorage.getItem('alyraSign_attendances');
       const allAttendances = attendancesJson ? JSON.parse(attendancesJson) : [];
       const studentAddress = studentPubkey.toString();
       
       return allAttendances
-        .filter((a: AttendanceResult) => a.student === studentAddress)
-        .map((a: AttendanceResult) => ({
-          id: a.id,
-          sessionId: a.sessionId,
-          student: new PublicKey(a.student),
-          isPresent: a.isPresent,
-          checkInTime: a.checkInTime,
-          checkOutTime: a.checkOutTime,
-          note: a.note,
-          createdAt: a.createdAt,
-          updatedAt: a.updatedAt
+        .filter((a: any) => a.student === studentAddress)
+        .map((a: any) => ({
+          ...a,
+          student: new PublicKey(a.student)
         }));
     }
   } catch (error: unknown) {
     console.error('Erreur lors de la récupération des présences:', error);
-    toast.error(ERROR_ATTENDANCE_LIST_MESSAGE);
+    toast.error('Erreur lors de la récupération des présences');
     return [];
   }
 };
@@ -1054,24 +989,368 @@ export const getStudentAttendances = async (studentPubkey: PublicKey, wallet: an
 /**
  * Trouve l'adresse PDA pour une formation spécifique
  */
-export const findFormationPDA = async (id: string) => {
+export const findFormationPDA = async (trainer: PublicKey): Promise<PDAResult> => {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("formation"), Buffer.from(id)],
-    new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID || '')
+    [Buffer.from(FORMATION_SEED), trainer.toBuffer()],
+    PROGRAM_ID
   );
 };
 
 /**
  * Trouve l'adresse PDA pour une session spécifique
  */
-export const findSessionPDA = async (formationPubkey: PublicKey, id: string) => {
+export const findSessionPDA = async (formation: PublicKey): Promise<PDAResult> => {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("session"), formationPubkey.toBuffer(), Buffer.from(id)],
-    new PublicKey(process.env.NEXT_PUBLIC_PROGRAM_ID || '')
+    [Buffer.from(SESSION_SEED), formation.toBuffer()],
+    PROGRAM_ID
+  );
+};
+
+/**
+ * Trouve l'adresse PDA pour une présence spécifique
+ */
+export const findAttendancePDA = async (session: PublicKey, student: PublicKey): Promise<PDAResult> => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(ATTENDANCE_SEED), session.toBuffer(), student.toBuffer()],
+    PROGRAM_ID
+  );
+};
+
+/**
+ * Trouve l'adresse PDA pour une inscription spécifique
+ */
+export const findEnrollmentPDA = async (formation: PublicKey, student: PublicKey): Promise<PDAResult> => {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(ENROLLMENT_SEED), formation.toBuffer(), student.toBuffer()],
+    PROGRAM_ID
   );
 };
 
 // Exporter uniquement l'IDL
 export { IDL } from './idl/alyrasign';
 
-// Supprimer la redéclaration de PROGRAM_ID 
+export const getWaitlistEntries = async (
+  formationId: string,
+  wallet: AnchorWallet,
+  connection: Connection
+): Promise<WaitlistEntry[]> => {
+  try {
+    const program = getProgram(wallet, connection);
+    const formationPubkey = new PublicKey(formationId);
+    const entries = await program.account.waitlistEntry.all([
+      {
+        memcmp: {
+          offset: 8,
+          bytes: formationPubkey.toBase58(),
+        },
+      },
+    ]);
+
+    return entries.map((entry: { publicKey: PublicKey; account: any }) => ({
+      id: entry.publicKey.toString(),
+      student: entry.account.student.toString(),
+      formation: entry.account.formation.toString(),
+      position: entry.account.position,
+      status: entry.account.status as WaitlistStatus,
+      timestamp: entry.account.timestamp.toNumber(),
+      createdAt: entry.account.createdAt.toNumber(),
+      updatedAt: entry.account.updatedAt.toNumber(),
+    }));
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la liste d\'attente:', error);
+    throw error;
+  }
+};
+
+export const joinWaitlist = async (
+  formationId: string,
+  wallet: AnchorWallet,
+  connection: Connection
+): Promise<string> => {
+  try {
+    const program = getProgram(wallet, connection);
+    const provider = getProvider(wallet, connection);
+    const formationPubkey = new PublicKey(formationId);
+    const [waitlistEntry] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from('waitlist'),
+        formationPubkey.toBuffer(),
+        wallet.publicKey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    const tx = await program.methods
+      .joinWaitlist()
+      .accounts({
+        formation: formationPubkey,
+        waitlistEntry,
+        student: wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return tx;
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout à la liste d\'attente:', error);
+    throw error;
+  }
+};
+
+export const promoteFromWaitlist = async (
+  formationId: string,
+  entryId: string,
+  wallet: AnchorWallet,
+  connection: Connection
+): Promise<string> => {
+  try {
+    const program = getProgram(wallet, connection);
+    const formationPubkey = new PublicKey(formationId);
+    const waitlistEntryPubkey = new PublicKey(entryId);
+    const [enrollment] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from('enrollment'),
+        formationPubkey.toBuffer(),
+        waitlistEntryPubkey.toBuffer(),
+      ],
+      program.programId
+    );
+
+    const tx = await program.methods
+      .promoteFromWaitlist()
+      .accounts({
+        formation: formationPubkey,
+        waitlistEntry: waitlistEntryPubkey,
+        enrollment,
+        trainer: wallet.publicKey,
+      })
+      .rpc();
+
+    return tx;
+  } catch (error) {
+    console.error('Erreur lors de la promotion de la liste d\'attente:', error);
+    throw error;
+  }
+};
+
+/**
+ * Initialise le compte de stockage principal du programme
+ */
+export async function initializeProgramStorage(
+  wallet: ExtendedWalletContextState,
+  connection: Connection
+): Promise<void> {
+  try {
+    if (!wallet.connected || !wallet.wallet || !wallet.publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    const walletAdapter: AnchorWallet = {
+      publicKey: wallet.publicKey,
+      signTransaction: async <T extends Transaction | VersionedTransaction>(tx: T) => {
+        if (!wallet.signTransaction) {
+          throw new Error('Wallet does not support transaction signing');
+        }
+        return wallet.signTransaction(tx);
+      },
+      signAllTransactions: async <T extends Transaction | VersionedTransaction>(txs: T[]) => {
+        if (!wallet.signAllTransactions) {
+          throw new Error('Wallet does not support signing all transactions');
+        }
+        return wallet.signAllTransactions(txs);
+      }
+    };
+
+    const provider = getProvider(walletAdapter, connection);
+    const program = getProgram(walletAdapter, connection);
+
+    // Trouver le PDA pour le stockage
+    const [storagePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('storage')],
+      PROGRAM_ID
+    );
+
+    // Appeler l'instruction initialize du programme
+    const tx = await program.methods
+      .initialize()
+      .accounts({
+        admin: wallet.publicKey,
+        storage: storagePda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Attendre la confirmation
+    const confirmation = await connection.confirmTransaction(tx, 'confirmed');
+    
+    if (confirmation.value.err) {
+      throw new Error(`Erreur lors de la confirmation: ${JSON.stringify(confirmation.value.err)}`);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Obtient l'adresse du PDA de stockage
+ */
+export const getStoragePda = async () => {
+  const [storagePda] = await PublicKey.findProgramAddress(
+    [Buffer.from('storage')],
+    PROGRAM_ID
+  );
+  return storagePda;
+};
+
+/**
+ * Vérifie l'état du compte de stockage
+ */
+export const checkStorageAccount = async (connection: any) => {
+  try {
+    const storagePda = await getStoragePda();
+    const accountInfo = await connection.getAccountInfo(storagePda);
+    
+    if (!accountInfo) {
+      console.log('Le compte de stockage n\'existe pas encore');
+      return false;
+    }
+    
+    console.log('Le compte de stockage existe et contient des données');
+    return true;
+  } catch (error) {
+    console.error('Erreur lors de la vérification du compte de stockage:', error);
+    return false;
+  }
+};
+
+export async function checkProgramState(connection: Connection): Promise<{
+  programExists: boolean;
+  storageExists: boolean;
+  error?: string;
+}> {
+  try {
+    // Vérifier le programme
+    const programInfo = await connection.getAccountInfo(PROGRAM_ID);
+    if (!programInfo) {
+      return {
+        programExists: false,
+        storageExists: false,
+        error: 'Programme non déployé'
+      };
+    }
+
+    // Vérifier le storage
+    const [storagePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from('storage')],
+      PROGRAM_ID
+    );
+    const storageInfo = await connection.getAccountInfo(storagePda);
+
+    return {
+      programExists: true,
+      storageExists: !!storageInfo,
+      error: !storageInfo ? 'Storage non initialisé' : undefined
+    };
+  } catch (error) {
+    console.error('Erreur vérification:', error);
+    return {
+      programExists: false,
+      storageExists: false,
+      error: 'Erreur de vérification'
+    };
+  }
+}
+
+export async function updateAdminAddress(
+  connection: Connection,
+  wallet: WalletContextState,
+  newAdminAddress: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log('Début updateAdminAddress');
+    console.log('Wallet:', wallet);
+    console.log('Connection:', connection);
+    console.log('Nouvelle adresse admin:', newAdminAddress);
+
+    if (!wallet.publicKey) {
+      throw new Error('Wallet non connecté');
+    }
+
+    // Vérifier l'état des comptes
+    const state = await checkProgramState(connection);
+    console.log('État des comptes:', state);
+
+    if (!state.programExists) {
+      throw new Error('Le programme n\'est pas déployé');
+    }
+
+    if (!state.storageExists) {
+      throw new Error('Le compte de stockage n\'est pas initialisé');
+    }
+
+    // Créer la transaction
+    const transaction = new Transaction();
+    
+    // Ajouter l'instruction d'update
+    const instruction = new TransactionInstruction({
+      keys: [
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+        { pubkey: new PublicKey(newAdminAddress), isSigner: false, isWritable: false }
+      ],
+      programId: PROGRAM_ID,
+      data: Buffer.from([1]) // Instruction pour update admin
+    });
+
+    transaction.add(instruction);
+
+    // Envoyer la transaction
+    const signature = await wallet.sendTransaction(transaction, connection, {
+      signers: [],
+      preflightCommitment: 'confirmed',
+      maxRetries: 3
+    });
+
+    console.log('Transaction envoyée:', signature);
+
+    // Attendre la confirmation
+    const confirmation = await connection.confirmTransaction(signature);
+    console.log('Confirmation:', confirmation);
+
+    if (confirmation.value.err) {
+      throw new Error('Erreur de confirmation');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Erreur updateAdminAddress:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erreur inconnue'
+    };
+  }
+}
+
+export const getProgramInstance = async (): Promise<AlyraSignProgram> => {
+  const wallet = await getWallet();
+  const connection = await getConnection();
+  return getProgram(wallet as AnchorWallet, connection);
+};
+
+export const getProgramAccounts = async (): Promise<Array<{ pubkey: PublicKey; account: any }>> => {
+  const programInstance = await getProgramInstance();
+  return programInstance.account.all();
+};
+
+export const getProgramAccountsByOwner = async (owner: PublicKey): Promise<Array<{ pubkey: PublicKey; account: any }>> => {
+  const programInstance = await getProgramInstance();
+  return programInstance.account.all([{ memcmp: { offset: 8, bytes: owner.toBase58() } }]);
+};
+
+export const getProgramAccountsByOwnerAndType = async (owner: PublicKey, type: string): Promise<Array<{ pubkey: PublicKey; account: any }>> => {
+  const programInstance = await getProgramInstance();
+  return programInstance.account.all([
+    { memcmp: { offset: 8, bytes: owner.toBase58() } },
+    { memcmp: { offset: 40, bytes: type } }
+  ]);
+}; 

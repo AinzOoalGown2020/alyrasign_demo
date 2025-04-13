@@ -1,17 +1,9 @@
 import { WalletAdapterNetwork, WalletError } from '@solana/wallet-adapter-base';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import {
-    PhantomWalletAdapter,
-    SolflareWalletAdapter,
-    BackpackWalletAdapter,
-    TorusWalletAdapter,
-    LedgerWalletAdapter,
-    SlopeWalletAdapter,
-    GlowWalletAdapter
-} from '@solana/wallet-adapter-wallets';
+import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { Cluster, clusterApiUrl } from '@solana/web3.js';
 import { FC, ReactNode, useCallback, useMemo } from 'react';
-import { AutoConnectProvider, useAutoConnect } from './AutoConnectProvider';
+import { AutoConnectProvider } from './AutoConnectProvider';
 import { notify } from "../utils/notifications";
 import { NetworkConfigurationProvider, useNetworkConfiguration } from './NetworkConfigurationProvider';
 import dynamic from "next/dynamic";
@@ -23,7 +15,6 @@ const ReactUIWalletModalProviderDynamic = dynamic(
 );
 
 const WalletContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
-    const { autoConnect } = useAutoConnect();
     const { networkConfiguration } = useNetworkConfiguration();
     const network = networkConfiguration as WalletAdapterNetwork;
     const endpoint = useMemo(() => clusterApiUrl(networkConfiguration as WalletAdapterNetwork), [networkConfiguration]);
@@ -31,15 +22,11 @@ const WalletContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
     console.log("Réseau configuré:", network);
     console.log("Endpoint:", endpoint);
 
+    // Utiliser uniquement les adaptateurs standards
     const wallets = useMemo(
         () => [
             new PhantomWalletAdapter({ network }),
-            new SolflareWalletAdapter({ network }),
-            new BackpackWalletAdapter({ network }),
-            new TorusWalletAdapter(),
-            new LedgerWalletAdapter(),
-            new SlopeWalletAdapter({ network }),
-            new GlowWalletAdapter({ network })
+            new SolflareWalletAdapter({ network })
         ],
         [network]
     );
@@ -54,7 +41,12 @@ const WalletContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
 
     return (
         <ConnectionProvider endpoint={endpoint}>
-            <WalletProvider wallets={wallets} onError={onError} autoConnect={autoConnect}>
+            <WalletProvider 
+                wallets={wallets} 
+                onError={onError} 
+                autoConnect={true}
+                localStorageKey="walletName"
+            >
                 <ReactUIWalletModalProviderDynamic>
                     {children}
                 </ReactUIWalletModalProviderDynamic>
@@ -63,14 +55,17 @@ const WalletContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
     );
 };
 
+const WalletContextProviderDynamic = dynamic(
+    async () => WalletContextProvider,
+    { ssr: false }
+);
+
 export const ContextProvider: FC<{ children: ReactNode }> = ({ children }) => {
     return (
         <NetworkConfigurationProvider>
-            <AutoConnectProvider>
-                <WalletContextProvider>
-                    {children}
-                </WalletContextProvider>
-            </AutoConnectProvider>
+            <WalletContextProviderDynamic>
+                {children}
+            </WalletContextProviderDynamic>
         </NetworkConfigurationProvider>
     );
 };

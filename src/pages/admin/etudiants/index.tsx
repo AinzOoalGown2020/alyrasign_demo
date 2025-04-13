@@ -51,44 +51,10 @@ const AdminEtudiantsPage: FC = () => {
   }, [wallet.connected, wallet.publicKey, router]);
   
   const loadData = () => {
-    // Simuler le chargement des formations depuis la blockchain
-    const mockFormations: Formation[] = [
-      { id: '1', title: 'Développement Blockchain Avancé' },
-      { id: '2', title: 'Smart Contracts Solana' },
-      { id: '3', title: 'NFT et Métavers' }
-    ];
-    
-    // Simuler le chargement des groupes depuis la blockchain
-    const mockPendingGroups: StudentGroup[] = [
-      {
-        id: '1',
-        name: 'Groupe A',
-        students: [
-          '8Kw7yz1mVrsSSSi7afPs1evRnaiQNQGj8x6xnL6UwxgB',
-          '5BzCh3mbZs8RuGAZoGr4Jq9R4YyLxwj9q1FXhLaY1GDC'
-        ],
-        formations: ['1'],
-        isPushedToBlockchain: false
-      }
-    ];
-    
-    const mockValidatedGroups: StudentGroup[] = [
-      {
-        id: '2',
-        name: 'Groupe B',
-        students: [
-          '9Kw7yz1mVrsSSSi7afPs1evRnaiQNQGj8x6xnL6UwxgC',
-          '6BzCh3mbZs8RuGAZoGr4Jq9R4YyLxwj9q1FXhLaY1GDD',
-          '7DzCh3mbZs8RuGAZoGr4Jq9R4YyLxwj9q1FXhLaY1GEE'
-        ],
-        formations: ['1', '2'],
-        isPushedToBlockchain: true
-      }
-    ];
-    
-    setFormations(mockFormations);
-    setPendingGroups(mockPendingGroups);
-    setValidatedGroups(mockValidatedGroups);
+    // Initialiser avec des tableaux vides
+    setFormations([]);
+    setPendingGroups([]);
+    setValidatedGroups([]);
   };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

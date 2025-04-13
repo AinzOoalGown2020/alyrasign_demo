@@ -83,73 +83,8 @@ const EtudiantPortalPage: FC = () => {
   }, [wallet.connected, wallet.publicKey, router, loadAttendances]);
   
   const loadStudentData = () => {
-    // Simuler le chargement des formations de l'étudiant depuis la blockchain
-    const now = new Date();
-    
-    const mockFormations: Formation[] = [
-      {
-        id: '1',
-        title: 'Développement Blockchain Avancé',
-        description: 'Apprenez les techniques avancées de développement blockchain sur Solana',
-        startDate: new Date('2023-09-01'),
-        endDate: new Date('2023-12-15'),
-        sessions: [
-          {
-            id: '1',
-            formationId: '1',
-            title: 'Introduction à Solana',
-            date: new Date('2023-09-05'),
-            startTime: '09:00',
-            endTime: '12:30',
-            attended: true
-          },
-          {
-            id: '2',
-            formationId: '1',
-            title: 'Smart Contracts avec Rust',
-            date: new Date('2023-09-12'),
-            startTime: '09:00',
-            endTime: '12:30',
-            attended: true
-          },
-          {
-            id: '3',
-            formationId: '1',
-            title: 'Développement d\'applications décentralisées',
-            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5), // 5 jours dans le futur
-            startTime: '09:00',
-            endTime: '12:30'
-          }
-        ]
-      },
-      {
-        id: '2',
-        title: 'Smart Contracts Solana',
-        description: 'Création et déploiement de smart contracts sur Solana',
-        startDate: new Date('2023-10-05'),
-        endDate: new Date('2024-01-20'),
-        sessions: [
-          {
-            id: '4',
-            formationId: '2',
-            title: 'Concepts de base des smart contracts',
-            date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2), // 2 jours dans le futur
-            startTime: '14:00',
-            endTime: '17:30'
-          }
-        ]
-      }
-    ];
-    
-    setFormations(mockFormations);
-    
-    // Trouver la prochaine session
-    const allSessions = mockFormations.flatMap(f => f.sessions);
-    const futureSessions = allSessions.filter(s => s.date > now).sort((a, b) => a.date.getTime() - b.date.getTime());
-    
-    if (futureSessions.length > 0) {
-      setNextSession(futureSessions[0]);
-    }
+    // Initialiser avec un tableau vide
+    setFormations([]);
   };
   
   const handleSignAttendance = async () => {

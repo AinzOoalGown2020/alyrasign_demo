@@ -6,15 +6,6 @@ export function notify(newNotification: {
   description?: string
   txid?: string
 }) {
-  const {
-    notifications,
-    set: setNotificationStore,
-  } = useNotificationStore.getState()
-
-  setNotificationStore((state: { notifications: any[] }) => {
-    state.notifications = [
-      ...notifications,
-      { type: 'success', ...newNotification },
-    ]
-  })
+  const store = useNotificationStore.getState()
+  store.addNotification({ type: 'success', ...newNotification })
 }

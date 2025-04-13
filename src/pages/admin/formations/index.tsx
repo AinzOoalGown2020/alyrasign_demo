@@ -48,40 +48,8 @@ const AdminFormationsPage: FC = () => {
   }, [wallet.connected, wallet.publicKey, router]);
   
   const loadFormations = () => {
-    // Simuler le chargement des formations depuis la blockchain
-    const mockFormations: Formation[] = [
-      {
-        id: '1',
-        title: 'Développement Blockchain Avancé',
-        description: 'Apprenez les techniques avancées de développement blockchain sur Solana',
-        startDate: new Date('2023-09-01'),
-        endDate: new Date('2023-12-15'),
-        sessionCount: 12,
-        lastSync: new Date('2023-08-20'),
-        isSynced: true
-      },
-      {
-        id: '2',
-        title: 'Smart Contracts Solana',
-        description: 'Création et déploiement de smart contracts sur Solana',
-        startDate: new Date('2023-10-05'),
-        endDate: new Date('2024-01-20'),
-        sessionCount: 10,
-        lastSync: new Date('2023-09-25'),
-        isSynced: true
-      },
-      {
-        id: '3',
-        title: 'NFT et Métavers',
-        description: 'Création et gestion de NFTs sur la blockchain Solana',
-        startDate: new Date('2024-01-10'),
-        endDate: new Date('2024-04-30'),
-        sessionCount: 0,
-        isSynced: false
-      }
-    ];
-    
-    setFormations(mockFormations);
+    // Initialiser avec un tableau vide
+    setFormations([]);
   };
   
   const handleCreateFormation = (e: React.FormEvent) => {

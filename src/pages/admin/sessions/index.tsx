@@ -61,44 +61,9 @@ const AdminSessionsPage: FC = () => {
   }, [wallet.connected, wallet.publicKey, router, formationId]);
   
   const loadFormationAndSessions = (formationId: string) => {
-    // Simuler le chargement de la formation depuis la blockchain
-    const mockFormation: Formation = {
-      id: formationId as string,
-      title: 'Développement Blockchain Avancé',
-      startDate: new Date('2023-09-01'),
-      endDate: new Date('2023-12-15')
-    };
-    
-    // Simuler le chargement des sessions depuis la blockchain
-    const mockSessions: Session[] = [
-      {
-        id: '1',
-        title: 'Introduction à Solana',
-        date: new Date('2023-09-05'),
-        startTime: '09:00',
-        endTime: '12:30',
-        isSynced: true
-      },
-      {
-        id: '2',
-        title: 'Smart Contracts avec Rust',
-        date: new Date('2023-09-12'),
-        startTime: '09:00',
-        endTime: '12:30',
-        isSynced: true
-      },
-      {
-        id: '3',
-        title: 'Développement d\'applications décentralisées',
-        date: new Date('2023-09-19'),
-        startTime: '09:00',
-        endTime: '12:30',
-        isSynced: false
-      }
-    ];
-    
-    setFormation(mockFormation);
-    setSessions(mockSessions);
+    // Initialiser avec des tableaux vides
+    setFormation(null);
+    setSessions([]);
   };
   
   const handleCreateSession = (e: React.FormEvent) => {

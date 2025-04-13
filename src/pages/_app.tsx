@@ -5,7 +5,7 @@ import { ContextProvider } from '../contexts/ContextProvider';
 import { AppBar } from '../components/AppBar';
 import { ContentContainer } from '../components/ContentContainer';
 import { Footer } from '../components/Footer';
-import Notifications from '../components/Notification'
+import { NotificationList } from '../components/Notification';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 require('@solana/wallet-adapter-react-ui/styles.css');
@@ -34,7 +34,7 @@ const App: FC<AppProps> = ({ Component, pageProps }) => {
                 pauseOnHover
                 theme="dark"
               />
-              <Notifications />
+              <NotificationList />
               <AppBar />
               <ContentContainer>
                 <Component {...pageProps} />

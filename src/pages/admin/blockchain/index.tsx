@@ -1,33 +1,55 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import Layout from '../../../components/Layout';
 import Card from '../../../components/Card';
 import Button from '../../../components/Button';
+import { checkProgramState } from '../../../lib/solana';
 
 export default function BlockchainAdmin() {
   const router = useRouter();
   const { publicKey, connected } = useWallet();
+  const { connection } = useConnection();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Vérifier si l'utilisateur est administrateur
-    const checkAdmin = async () => {
-      if (connected && publicKey) {
-        // Dans un environnement de test, nous vérifions simplement si l'adresse correspond à l'admin configuré
-        const adminAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET || '';
-        const isAdmin = publicKey.toString() === adminAddress;
-        setIsAdmin(isAdmin);
-        setIsLoading(false);
+    // Vérifier si l'utilisateur est administrateur et si le programme est initialisé
+    const checkAdminAndInitialization = async () => {
+      if (connected && publicKey && connection) {
+        try {
+          // Vérifier si l'adresse correspond à l'admin configuré
+          const adminAddress = process.env.NEXT_PUBLIC_ADMIN_WALLET || '';
+          const isAdminAddress = publicKey.toString() === adminAddress;
+          
+          // Vérifier si le programme est initialisé sur la blockchain
+          const state = await checkProgramState(connection);
+          const isProgramInitialized = state.programExists && state.storageExists;
+          
+          console.log('État de la blockchain:', state);
+          console.log('Est admin:', isAdminAddress);
+          console.log('Est initialisé:', isProgramInitialized);
+          
+          // L'utilisateur est admin seulement s'il a l'adresse admin ET que le programme est initialisé
+          setIsAdmin(isAdminAddress && isProgramInitialized);
+          setIsInitialized(isProgramInitialized);
+          setIsLoading(false);
+        } catch (error) {
+          console.error('Erreur lors de la vérification:', error);
+          setIsAdmin(false);
+          setIsInitialized(false);
+          setIsLoading(false);
+        }
       } else {
         setIsAdmin(false);
+        setIsInitialized(false);
         setIsLoading(false);
       }
     };
     
-    checkAdmin();
-  }, [connected, publicKey]);
+    checkAdminAndInitialization();
+  }, [connected, publicKey, connection]);
 
   if (isLoading) {
     return (
@@ -59,12 +81,23 @@ export default function BlockchainAdmin() {
         <div className="container mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold mb-6">Administration Blockchain</h1>
           <Card className="p-6">
-            <p className="text-center text-red-600 mb-4">
-              Cette page est réservée aux administrateurs.
-            </p>
-            <p className="text-center text-gray-700">
-              Votre adresse: {publicKey?.toString()}
-            </p>
+            {!isInitialized ? (
+              <p className="text-center text-red-600 mb-4">
+                Le programme n'est pas encore initialisé sur la blockchain. Veuillez initialiser le programme avant d'accéder à cette page.
+              </p>
+            ) : (
+              <p className="text-center text-red-600 mb-4">
+                Vous n'avez pas les droits d'administrateur nécessaires pour accéder à cette page.
+              </p>
+            )}
+            <div className="flex justify-center mt-4">
+              <Button
+                onClick={() => router.push('/admin/initialize')}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+              >
+                Initialiser le programme
+              </Button>
+            </div>
           </Card>
         </div>
       </Layout>

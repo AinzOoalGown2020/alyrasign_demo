@@ -20,7 +20,7 @@ interface NotificationProps {
   onHide?: () => void;
 }
 
-const NotificationList = () => {
+export const NotificationList = () => {
   const { notifications, set: setNotificationStore } = useNotificationStore((s: any) => s);
 
   const reversedNotifications = [...notifications].reverse();
@@ -112,5 +112,3 @@ const Notification = ({ type, message, description, txid, onHide }: Notification
     </div>
   );
 };
-
-export default NotificationList;

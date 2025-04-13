@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-alyrasign = "9G6Skb8Enu9MhTAkJyqHBDmq6AP3jPD2RVn5svRZxDiM"
+alyrasign = "ATYrhRcGeQGKo43urjfgcWHkqMpDLYaCB9wmXodTC3Vu"
 
 [registry]
 url = "https://api.apr.dev"

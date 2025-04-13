@@ -27,6 +27,7 @@
     "@solana/wallet-adapter-wallets": "^0.19.16",
     "@solana/web3.js": "^1.73.0",
     "@tailwindcss/typography": "^0.5.9",
+    "@types/styled-components": "^5.1.34",
     "daisyui": "^1.24.3",
     "date-fns": "^2.29.3",
     "immer": "^9.0.12",
@@ -35,7 +36,9 @@
     "next-transpile-modules": "^10.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.5.2",
     "react-toastify": "^11.0.5",
+    "styled-components": "^6.1.17",
     "zustand": "^3.6.9"
   },
   "devDependencies": {

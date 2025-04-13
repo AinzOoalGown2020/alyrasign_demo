@@ -1,6 +1,4 @@
-import { useLocalStorage } from '@solana/wallet-adapter-react';
-import { createContext, FC, ReactNode, useContext } from 'react';
-
+import { createContext, FC, ReactNode, useContext, useState, useEffect } from 'react';
 
 export interface NetworkConfigurationState {
     networkConfiguration: string;
@@ -14,9 +12,28 @@ export function useNetworkConfiguration(): NetworkConfigurationState {
 }
 
 export const NetworkConfigurationProvider: FC<{ children: ReactNode }> = ({ children }) => {
-    const [networkConfiguration, setNetworkConfiguration] = useLocalStorage("network", "devnet");
+    const [networkConfiguration, setNetworkConfiguration] = useState<string>("devnet");
+
+    useEffect(() => {
+        const savedNetwork = localStorage.getItem("network");
+        if (savedNetwork) {
+            setNetworkConfiguration(savedNetwork);
+        }
+    }, []);
+
+    const handleSetNetworkConfiguration = (network: string) => {
+        setNetworkConfiguration(network);
+        localStorage.setItem("network", network);
+    };
 
     return (
-        <NetworkConfigurationContext.Provider value={{ networkConfiguration, setNetworkConfiguration }}>{children}</NetworkConfigurationContext.Provider>
+        <NetworkConfigurationContext.Provider 
+            value={{ 
+                networkConfiguration, 
+                setNetworkConfiguration: handleSetNetworkConfiguration 
+            }}
+        >
+            {children}
+        </NetworkConfigurationContext.Provider>
     );
 };

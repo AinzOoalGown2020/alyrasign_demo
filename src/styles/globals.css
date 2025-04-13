@@ -9,10 +9,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   background-image: radial-gradient(
-    circle farthest-side at 50% 100%,rgba(1, 9, 18, 0),
+    circle farthest-side at 50% 100%,
+    rgba(1, 9, 18, 0),
     rgba(1, 6, 14, 0.6) 36%,
     rgba(1, 14, 29, 0.6) 55%,
-    rgba(49, 18, 93, 0.4));
+    rgba(49, 18, 93, 0.4)
+  );
 }
 
 a {
@@ -22,6 +24,140 @@ a {
 
 * {
   box-sizing: border-box;
+}
+
+/* Style pour le modal de connexion */
+.wallet-adapter-modal {
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background: linear-gradient(145deg, #1a1a1a, #2a2a2a) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  padding: 1.5rem !important;
+  max-width: 400px !important;
+  width: 90% !important;
+  margin: 0 auto !important;
+}
+
+.wallet-adapter-modal-title {
+  color: white !important;
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  margin-bottom: 1.5rem !important;
+  text-align: center !important;
+}
+
+.wallet-adapter-modal-button-close {
+  background: transparent !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  padding: 0.5rem !important;
+  transition: all 0.2s ease !important;
+  position: absolute !important;
+  top: 1rem !important;
+  right: 1rem !important;
+}
+
+.wallet-adapter-modal-button-close:hover {
+  color: white !important;
+  transform: scale(1.1) !important;
+}
+
+.wallet-adapter-modal-list {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 1rem !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.wallet-adapter-modal-list-more {
+  color: #9333ea !important;
+  font-size: 0.875rem !important;
+  text-decoration: none !important;
+  transition: all 0.2s ease !important;
+  margin-top: 0.5rem !important;
+  text-align: center !important;
+  display: block !important;
+}
+
+.wallet-adapter-modal-list-more:hover {
+  color: #a855f7 !important;
+  text-decoration: underline !important;
+}
+
+/* Style pour les boutons de wallet dans le modal */
+.wallet-adapter-modal-list-item {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  transition: all 0.2s ease !important;
+  width: 240px !important;
+  max-width: 90% !important;
+  padding: 0.75rem 1rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.wallet-adapter-modal-list-item img {
+  margin-right: 1rem !important;
+  width: 24px !important;
+  height: 24px !important;
+  flex-shrink: 0 !important;
+}
+
+.wallet-adapter-modal-list-item span {
+  flex: 1 !important;
+  text-align: left !important;
+  color: white !important;
+  font-size: 0.95rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.wallet-adapter-modal-list-item span + span {
+  margin-left: 0.5rem !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 0.8rem !important;
+}
+
+.wallet-adapter-modal-list-item:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-2px) !important;
+}
+
+.wallet-adapter-modal-list-item:active {
+  transform: translateY(0) !important;
+}
+
+/* Style pour le bouton wallet sur la page d'accueil */
+.wallet-adapter-button {
+  background: linear-gradient(to right, #2563eb, #9333ea) !important;
+  color: white !important;
+  font-family: inherit !important;
+  font-size: 1.125rem !important;
+  padding: 0.75rem 2rem !important;
+  border-radius: 9999px !important;
+  border: none !important;
+  transition: all 0.3s ease !important;
+}
+
+.wallet-adapter-button:hover {
+  background: linear-gradient(to right, #1d4ed8, #7e22ce) !important;
+  transform: translateY(-1px);
+}
+
+.wallet-adapter-button:active {
+  transform: translateY(1px);
 }
 
 /* example: override wallet button style */
