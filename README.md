@@ -1,240 +1,247 @@
-# AlyraSign - Application de Gestion des Présences sur Solana
+INDEX
+- Analyser étape par étape du processus de soumission d'une demande d'accès
+- Fonctionnalités principales de la page "gestion des formations"
+- Fonctionnalités de la page "gestion des étudiants"
 
-AlyraSign est une application décentralisée (dApp) de gestion des présences pour les établissements de formation, construite sur la blockchain Solana.
+===============================================================================
+Analyser étape par étape du processus de soumission d'une demande d'accès
+===============================================================================
 
-## Fonctionnalités
+1. **Récupération des informations** :
+```typescript
+interface AccessRequestData {
+  name: string;      // Nom de l'utilisateur
+  email: string;     // Email de l'utilisateur
+  role: 'student' | 'trainer';  // Rôle choisi
+  message: string;   // Message optionnel
+  publicKey: string; // Adresse du wallet
+}
+```
 
-- Authentification via wallet Solana (Phantom, Solflare, etc.)
-- Gestion des rôles (étudiant, formateur) via tokens blockchain
-- Gestion des formations et des sessions
-- Gestion des groupes d'étudiants
-- Suivi des présences
+2. **Vérification du wallet** :
+```typescript
+if (!publicKey) {
+  throw new Error('Wallet non connecté');
+}
+```
 
-## Mode de démonstration
+3. **Création du PDA (Program Derived Address)** :
+```typescript
+const [pda] = await PublicKey.findProgramAddress(
+  [Buffer.from('access_request'), publicKey.toBuffer()],
+  program.programId
+);
+```
+- Premier seed : `'access_request'` (doit correspondre exactement à celui du programme)
+- Deuxième seed : l'adresse du wallet de l'utilisateur
+- Le PDA est dérivé de manière déterministe à partir de ces seeds
 
-L'application est actuellement en mode de démonstration avec des données simulées. Pour tester l'application sans implémenter les smart contracts Solana, vous pouvez utiliser les wallets de test suivants :
+4. **Préparation de la transaction** :
+```typescript
+await program.methods
+  .requestAccess(
+    data.role,    // Rôle (student ou trainer)
+    data.name,    // Nom
+    data.email,   // Email
+    data.message  // Message optionnel
+  )
+  .accounts({
+    user: publicKey,           // Le signataire (l'utilisateur)
+    accessRequest: pda,        // L'adresse PDA où seront stockées les données
+    systemProgram: SystemProgram.programId  // Programme système de Solana
+  })
+  .rpc();
+```
 
-### Adresses de test prédéfinies
+5. **Validation de la transaction** :
+- L'utilisateur voit un popup de son wallet (Phantom, Solflare, etc.)
+- Il doit signer la transaction pour :
+  - Payer les frais de création du compte PDA
+  - Autoriser le programme à créer et initialiser le compte
+  - Valider les données qui seront stockées
 
-| Adresse Wallet | Rôle assigné |
-|----------------|--------------|
-| 79ziyYSUHVNENrJVinuotWZQ2TX7n44vSeo1cgxFPzSy | formateur (admin) |
+6. **Gestion des notifications** :
+```typescript
+// En cas de succès
+addNotification({
+  type: 'success',
+  message: 'Demande d\'accès soumise avec succès',
+});
 
-Pour tester l'application :
-1. Connectez-vous avec l'un des wallets ci-dessus
-2. L'application vous redirigera automatiquement vers l'interface correspondant à votre rôle
-3. Vous pouvez également tester le processus de demande d'accès avec un nouveau wallet
+// En cas d'erreur
+addNotification({
+  type: 'error',
+  message: 'Erreur lors de la soumission de la demande',
+});
+```
 
-**Note** : Les données sont stockées dans le localStorage du navigateur. Pour une démonstration inter-navigateurs ou multi-appareils, utilisez les adresses prédéfinies ci-dessus.
+7. **Vérification de l'existence d'une demande** :
+```typescript
+const checkExistingRequest = async () => {
+  if (!publicKey) return false;
+  try {
+    const [pda] = await PublicKey.findProgramAddress(
+      [Buffer.from('access_request'), publicKey.toBuffer()],
+      program.programId
+    );
+    const account = await program.account.accessRequest.fetch(pda);
+    return account !== null;
+  } catch (error) {
+    console.error('Erreur lors de la vérification de la demande existante:', error);
+    return false;
+  }
+};
+```
 
-## État du Projet
+Points vérifiés pour s'assurer que tout fonctionne correctement :
 
-Le frontend de l'application est fonctionnel avec des données simulées. Pour finaliser le projet, l'implémentation des smart contracts Solana est nécessaire.
+1. **Cohérence des seeds** :
+✅ **Cohérence des seeds** : Les seeds sont cohérents entre le programme Solana et le frontend :
+- Programme : `[b"access_request", user.key().as_ref()]`
+- Frontend : `[Buffer.from('access_request'), publicKey.toBuffer()]`
 
-### Prochaines étapes
+2. **Validation des données** :
+✅ Toutes les validations sont en place :
+- Rôle : limité à 'student' ou 'trainer' dans le type `AccessRequestData`
+- Email : validation du format avec regex et longueur maximale
+- Nom : validation de longueur minimale (2) et maximale (100)
+- Message : optionnel avec validation de longueur maximale (200)
 
-1. **Implémentation des Smart Contracts Solana**
+3. **Gestion des erreurs** :
+✅ Toutes les erreurs sont gérées :
+- Wallet non connecté : vérifié avant la soumission
+- Erreurs de transaction : traduites en messages utilisateur
+- Compte existant : vérifié avant la soumission
+- Erreurs de validation : gérées dans le formulaire et le hook
 
-   - Créer un programme Solana pour la gestion des rôles :
-     ```bash
-     # Initialiser un nouveau projet Anchor
-     anchor init alyrasign_program
-     cd alyrasign_program
-     ```
-
-   - Structure des comptes blockchain à implémenter :
-     - Compte de stockage des demandes d'accès
-     - Compte de tokens pour les rôles
-     - Compte de stockage des formations
-     - Compte de stockage des sessions
-     - Compte de stockage des groupes d'étudiants
-
-2. **Instructions du Programme Solana à développer**
-
-   - Gestion des Rôles :
-     ```rust
-     // Exemple de structure pour le programme de gestion des rôles
-     #[program]
-     pub mod alyrasign_roles {
-         use super::*;
-         
-         pub fn request_role(ctx: Context<RequestRole>, role: String, message: String) -> Result<()> {
-             // Code pour créer une demande de rôle
-         }
-         
-         pub fn approve_role(ctx: Context<ApproveRole>, request_id: String) -> Result<()> {
-             // Code pour approuver une demande et émettre un token
-         }
-         
-         pub fn reject_role(ctx: Context<RejectRole>, request_id: String) -> Result<()> {
-             // Code pour rejeter une demande
-         }
-     }
-     ```
-
-3. **Intégration Frontend-Backend**
-
-   Modifier les fonctions suivantes pour intégrer les smart contracts :
-   
-   - `src/pages/access/index.tsx` : `handleSubmit` pour envoyer une transaction de demande de rôle
-   - `src/pages/admin/tokens/index.tsx` : `handleApprove` et `handleReject` pour approuver/rejeter via blockchain
-   - `src/views/home/index.tsx` : `checkUserRole` pour vérifier les tokens sur la blockchain
-
-## Installation et Développement
-
-1. **Prérequis**
-   - Node.js (>= 16.x)
-   - Solana CLI
-   - Anchor Framework
-   - Wallet Solana (Phantom, Solflare)
-
-2. **Installation**
-   ```bash
-   # Cloner le dépôt
-   git clone https://github.com/votre-username/alyrasign.git
-   cd alyrasign
-   
-   # Installer les dépendances
-   npm install
-   ```
-
-3. **Démarrer l'application en mode développement**
-   ```bash
-   npm run dev
-   ```
-
-4. **Compiler et déployer les programmes Solana**
-   ```bash
-   # Dans le dossier du programme
-   anchor build
-   anchor deploy
-   ```
-
-## Architecture
-
-L'application suit une architecture où :
-- Les données sont stockées sur la blockchain Solana
-- Les smart contracts gèrent la logique métier
-- Le frontend en Next.js fournit l'interface utilisateur
-
-## État actuel
-
-Actuellement, l'application utilise des données simulées stockées dans le localStorage du navigateur. L'objectif est de remplacer cette simulation par de véritables interactions avec la blockchain Solana.
-
-## License
-
-MIT
-
-## Intégration Blockchain Solana
-
-AlyraSign est conçu pour fonctionner avec la blockchain Solana. Nous avons mis en place une intégration hybride qui permet de :
-
-1. Développer et tester l'application en mode simulation (utilisant localStorage)
-2. Déployer l'application en production avec de vraies transactions blockchain
-
-### Fonctionnalités blockchain implémentées
-
-- Gestion des demandes d'accès (création, approbation, rejet)
-- Gestion des formations (création, mise à jour)
-- Gestion des sessions (création, activation)
-- Vérification des rôles des utilisateurs
-
-### Mode hybride
-
-L'application peut fonctionner dans deux modes, contrôlés par une variable d'environnement :
-
-- **Mode simulation** : Toutes les données sont stockées localement (localStorage).
-- **Mode blockchain** : Les données sont stockées sur la blockchain Solana.
-
-Consultez le fichier [INTEGRATION_BLOCKCHAIN.md](./INTEGRATION_BLOCKCHAIN.md) pour plus de détails sur l'intégration et les étapes restantes.
+4. **État du compte** :
+✅ **État du compte** :
+- Le compte PDA est créé avec les bonnes permissions (init, payer, space)
+- Les données sont correctement stockées dans la structure `AccessRequest`
+- Le statut initial est bien défini comme `RequestStatus::Pending`
+- L'espace du compte est correctement calculé avec `ACCESS_REQUEST_SPACE`
 
 
-# Structure du Programme Solana (lib.rs)
-Le programme Solana AlyraSign est développé avec le framework Anchor et gère plusieurs fonctionnalités clés:
+===============================================================================
+Fonctionnalités principales de la page "gestion des formations"
+===============================================================================
 
-1. Gestion des demandes d'accès:
-- Initialisation du stockage (initialize_access_storage)
-- Création de demandes (create_access_request)
-- Approbation/Rejet des demandes (approve_access_request, reject_access_request)
+1. **Gestion des Formations** (`src/pages/admin/formations/index.tsx`) :
+   - ✅ Vérification de l'authentification et des permissions (via `DEV_ADDRESS`)
+   - ✅ Interface de création de formation avec :
+     - Titre
+     - Description
+     - Date de début
+     - Date de fin
+   - ✅ Fonctionnalités de gestion :
+     - Création de formation (`handleCreateFormation`)
+     - Suppression de formation (`handleDeleteFormation`)
+     - Synchronisation individuelle (`handleSyncFormation`)
+     - Synchronisation globale (`handleSyncAll`)
+   - ✅ Navigation vers la gestion des sessions
 
-2. Gestion des formations:
-- Initialisation du stockage (initialize_formation_storage)
-- Création/Mise à jour des formations (upsert_formation)
+2. **Gestion des Sessions** (`src/pages/admin/sessions/index.tsx`) :
+   - ✅ Affichage des informations de la formation parente
+   - ✅ Interface de création de session avec :
+     - Titre
+     - Date
+     - Heure de début
+     - Heure de fin
+   - ✅ Fonctionnalités de gestion :
+     - Création de session (`handleCreateSession`)
+     - Suppression de session (`handleDeleteSession`)
+     - Synchronisation globale (`handleSyncAll`)
+   - ✅ Navigation retour vers les formations
 
-3. Gestion des sessions:
-- Initialisation du stockage (initialize_session_storage)
-- Création de sessions (create_session)
+3. **État et Synchronisation** :
+   - ✅ Gestion de l'état local des formations et sessions
+   - ✅ Indicateurs de synchronisation (`isSynced`)
+   - ✅ Préparation pour l'intégration blockchain (commentaires et placeholders)
 
-4. Gestion des présences:
-- Initialisation du stockage (initialize_attendance_storage)
-- Enregistrement des présences (record_attendance)
-- Mise à jour des présences (update_attendance)
+4. **Interface Utilisateur** :
+   - ✅ Design responsive
+   - ✅ Modales de création
+   - ✅ Boutons d'action
+   - ✅ Affichage des statuts
+   - ✅ Messages de confirmation pour les actions critiques
 
-Le programme utilise des Program Derived Addresses (PDAs) pour stocker les données et implémente des vérifications strictes sur les longueurs des champs.
+Les fonctionnalités essentielles sont en place, mais il y a quelques points à noter :
 
-## Structure des Comptes
-1. AccessRequestStorage: Stockage central pour les demandes d'accès
-2. AccessRequest: Stocke les informations d'une demande d'accès individuelle
-3. FormationStorage: Stockage central pour les formations
-4. Formation: Stocke les informations d'une formation
-5. SessionStorage: Stockage central pour les sessions
-6. Session: Stocke les informations d'une session
-7. AttendanceStorage: Stockage central pour les présences
-8. Attendance: Stocke les informations d'une présence
+1. Les données sont actuellement initialisées avec des tableaux vides (suite à notre nettoyage précédent)
+2. Les fonctions de synchronisation sont préparées mais ne font pas encore d'appels réels à la blockchain
+3. Le `DEV_ADDRESS` est codé en dur pour le moment (`79ziyYSUHVNENrJVinuotWZQ2TX7n44vSeo1cgxFPzSy`)
+4. Les liens vers Solana Explorer sont préparés mais utilisent l'adresse du wallet connecté
 
-## Intégration Front-end (solana.ts)
-Le fichier solana.ts fournit l'interface entre le front-end React et le programme Solana, avec des fonctions pour:
+Toute la structure est en place pour permettre :
+- La création et la gestion des formations
+- La création et la gestion des sessions
+- La synchronisation future avec la blockchain
+- La gestion des présences (bouton préparé dans l'interface des sessions)
 
-1. Initialisation et configuration:
-- getProvider: Obtient le provider Anchor
-- getProgram: Obtient l'instance du programme AlyraSign
-- Fonctions pour trouver les PDAs: findAccessStoragePDA, findFormationStoragePDA, etc.
+Vous pouvez maintenant tester la création de formations et de sessions, sachant que les données resteront locales jusqu'à l'implémentation complète de l'intégration blockchain.
 
-2. Gestion des demandes d'accès:
-- createAccessRequest: Crée une nouvelle demande
-- approveAccessRequest: Approuve une demande
-- rejectAccessRequest: Rejette une demande
-- getAccessRequests: Récupère les demandes
+===============================================================================
+Fonctionnalités de la page "gestion des étudiants"
+===============================================================================
 
-3. Gestion des formations et sessions:
-- createFormation: Crée une formation
-- createSession: Crée une session
-- getFormations: Récupère les formations
-- getSessions: Récupère les sessions
+1. **Gestion des Accès** (`src/pages/admin/etudiants/index.tsx`) :
+   - ✅ Interface de gestion des demandes d'accès :
+     - Liste des demandes en attente
+     - Informations sur l'étudiant (adresse wallet)
+     - Statut de la demande
+     - Actions (approuver/rejeter)
+   - ✅ Fonctions de gestion :
+     - `handleApproveRequest`
+     - `handleRejectRequest`
 
-4. Gestion des présences:
-- initializeAttendanceStorage: Initialise le stockage des présences
-- recordAttendance: Enregistre une présence (check-in)
-- updateAttendance: Met à jour une présence (check-out)
-- getStudentAttendances: Récupère l'historique des présences d'un étudiant
+2. **Gestion des Groupes** :
+   - ✅ Interface de création de groupe :
+     - Nom du groupe
+     - Import de fichier CSV/TXT avec les adresses
+     - Sélection des formations associées
+   - ✅ Affichage des groupes :
+     - Liste des groupes en attente (`pendingGroups`)
+     - Liste des groupes validés (`validatedGroups`)
+   - ✅ Fonctionnalités :
+     - Import d'adresses via fichier (`handleFileChange`)
+     - Création de groupe (`handleCreateGroup`)
+     - Validation de groupe (`handleValidateGroup`)
+     - Suppression de groupe (`handleDeleteGroup`)
 
-Le code implémente deux modes de fonctionnement:
-- Mode blockchain (process.env.NEXT_PUBLIC_USE_BLOCKCHAIN === 'true'): Interagit avec le programme Solana
-- Mode simulation: Utilise le localStorage pour simuler le fonctionnement (utile pour le développement)
+3. **Synchronisation** :
+   - ✅ Indicateurs de statut :
+     - `isPushedToBlockchain` pour les groupes
+     - État de synchronisation des demandes d'accès
+   - ✅ Fonctions de synchronisation :
+     - `handleSyncGroup` pour les groupes individuels
+     - `handleSyncAll` pour tous les groupes
 
-## Fonctionnement de la Gestion des Présences
-1. Initialisation:
-L'administrateur initialise le stockage des présences via initializeAttendanceStorage
-Crée un compte qui suit le nombre total de présences et stocke l'administrateur
+4. **Gestion des Données** :
+   - ✅ Chargement des données :
+     - `loadData` pour les formations et groupes
+     - `loadAccessRequests` pour les demandes d'accès
+   - ✅ États locaux :
+     - `formations` pour la liste des formations
+     - `pendingGroups` pour les groupes en attente
+     - `validatedGroups` pour les groupes validés
+     - `studentAddresses` pour les adresses importées
+     - `selectedFormations` pour les formations sélectionnées
 
-2. Enregistrement des présences:
-Les étudiants enregistrent leur présence via recordAttendance
-Crée un PDA unique basé sur l'étudiant et l'ID de la session
-Stocke des informations comme l'heure d'arrivée et un message
+5. **Interface Utilisateur** :
+   - ✅ Composants :
+     - Liste des demandes d'accès
+     - Formulaire de création de groupe
+     - Liste des groupes
+     - Modal d'import de fichier
+   - ✅ Feedback utilisateur :
+     - Messages de confirmation
+     - Indicateurs de statut
+     - Notifications pour les actions importantes
 
-3. Mise à jour des présences:
-Les étudiants peuvent mettre à jour leur présence via updateAttendance
-Met à jour l'enregistrement avec l'heure de départ et éventuellement un nouveau message
+6. **Sécurité et Validation** :
+   - ✅ Vérification des permissions administrateur
+   - ✅ Validation des adresses wallet
+   - ✅ Confirmation pour les actions critiques
+   - ✅ Gestion des erreurs
 
-4. Consultation:
-Les données de présence peuvent être récupérées via getStudentAttendances
-Filtre les présences par étudiant
 
-Cette structure permet un suivi transparent et immuable des présences, tout en maintenant la flexibilité nécessaire pour les mises à jour légitimes.
-
-=================
--> si erreur "lock file version 4 requires -Znext-lockfile-bump"
-Passer la version de 4 à 3 dans Cargo.lock 
-
--> si erreur "failed to parse manifest at /..."
-Run "cargo update -p bytemuck_derive@1.9.1 --precise 1.8.1" 
